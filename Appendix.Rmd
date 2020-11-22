@@ -1,0 +1,310 @@
+---
+title: "Appendix"
+author: "Halley Paulson"
+date: "11/21/2020"
+output: html_document
+---
+
+This is all the code used throughout my project. It is very heavy so run with caution. The for-loops can be commented out to make it run faster since they wont do anything but show each step I did as I made GPCdf.
+
+```{r,eval=FALSE}
+load("GlobalPrisonCrimedf.RData")
+library(rvest)
+library(randomForest)
+require(caTools)
+library(hash)
+library(XML)
+library(stringR)
+
+```
+
+Code used for getting data into R
+```{r,eval=FALSE}
+#built in function of R
+read.csv("csvData.csv") 
+#saved as 2020CrimeIndex.RData
+
+#uses rvest
+url <- read_html("https://www.prisonstudies.org/highest-to-lowest/prison-population-total?field_region_taxonomy_tid=All")
+
+prisonPopCurrent <- url %>% html_nodes('table') %>% html_table()
+#searches for an <table> html node then transforms it into a table usable in R
+
+prisonPopCurrent<-prisonPopCurrent[[1]]
+#table was saved inside another object so this grabs it directly
+
+prisonPopCurrent<-prisonPopCurrent[2:3]
+#grabs only population data
+
+prisonPopCurrent<-na.omit(prisonPopCurrent)
+#saved as 2020PrisonPop.RData
+
+
+Href <- url %>% html_nodes('table') %>% html_nodes('a')
+cList <- c()
+
+for(x in Href){
+  cList <- c(cList,html_attr(x,"href"))}
+cList[169] <- "/country/curaçao-netherlands"
+cList[180] <- NA
+cList[199] <- NA
+cList[216] <- NA
+cList <- na.omit(cList)
+#scrapped suffixes of all available country pages from table on main page and fixed/removed objects causing errors
+
+prefix <- "https://www.prisonstudies.org"
+trendURL<-c()
+for(x in 1:length(cList)){
+  add <- paste(prefix,cList[x],sep="")
+  trendURL <- c(trendURL,add)}
+#stitch prefix and suffixes together to create full URL's for all pages
+
+PrisontableHash <- hash()
+for(x in trendURL){
+  blah <- x %>% read_html() %>% html_nodes(xpath = '//*[@id="views-aggregator-datatable"]')
+  PrisontableHash[x] <- html_table(blah[1])}
+#used full URL's to grab every trend table and saved it in a hash table using the URL as a key
+
+#saved as PrisonTrendHashTable.RData
+
+#uses rvest
+crimeTrends <- c("https://www.numbeo.com/crime/rankings_by_country.jsp?title=2016","https://www.numbeo.com/crime/rankings_by_country.jsp?title=2015","https://www.numbeo.com/crime/rankings_by_country.jsp?title=2014","https://www.numbeo.com/crime/rankings_by_country.jsp?title=2013-Q1")
+
+CrimetableVector <- c()
+
+for(y in crimeTrends){
+  CrimetableVector <- c(CrimetableVector, (y %>% read_html() %>% html_nodes(xpath = '//*[@id="t2"]') %>% html_table()))}
+#used a for-loop to gather tables and save them in another vector
+
+#saved as CrimeTrendTables.RData
+```
+
+Code used for making GPCdf : None of this code will actually run since GPCdf is finished and doesn't have all the original columns and rows that it had when I was writing this code.
+```{r,eval=FALSE}
+load("2020CrimeIndex.RData") 
+load("2020PrisonPop.RData") 
+load("CrimeTrendTables.RData")
+load("PrisonTrendHashTable.RData")
+load("GlobalPrisonCrimedf.RData")
+
+exists <- function(what,where){
+  for(y in 1:length(where)){
+    if(where[y] == what)
+      return(TRUE)
+  }
+  return(FALSE)}
+#helper function to determine if country was already in GPCdf
+
+findIndex <- function(what,where){
+  index = 1
+  for(y in 1:length(where)){
+    if(where[y] == what){
+      return(index)
+    }
+    index = index + 1}}
+#helper function to return location of specific country in GPCdf
+
+for(x in 1:length(prisonPopCurrent$Title)){
+  if(exists(prisonPopCurrent$Title[x],GPCdf$country) == TRUE){
+    index <- findIndex(prisonPopCurrent$Title[x],GPCdf$country)
+    GPCdf$PrisonPop2020[index] <- prisonPopCurrent$`Prison Population Total`[x]}
+  else{
+    add.row <- data.frame(prisonPopCurrent$Title[x],0,0,prisonPopCurrent$`Prison Population Total`[x])
+    names(add.row) <- c("country","crimeIndex","pop2020","PrisonPop2020")
+    GPCdf <- rbind(GPCdf,add.row)}}
+#This huge for-loop goes through GPCdf, which at the time was just the 2020 crime index table, and first checks if the country, who's data is trying to be added, already exists - either grabs it's index if it does exist or adds a new row with the data we have. Makes sure we don't overwrite anything.
+
+t16 <- CrimetableVector[2]
+t16 <- t16[[1]] 
+t15 <- CrimetableVector[3]
+t15 <- t15[[1]] 
+t14 <- CrimetableVector[4]
+t14 <- t14[[1]] 
+t13 <- CrimetableVector[5]
+t13 <- t13[[1]] 
+
+for(x in 1:length(t16$Country)){
+  if(exists(t16$Country[x],GPCdf$country) == TRUE){
+    index <- findIndex(t16$Country[x],GPCdf$country)
+    GPCdf$crimeIndex2016[index] <- t16$'Crime Index'[x]
+  }
+  
+}
+
+for(x in 1:length(t16$Country)){
+  if(exists(t15$Country[x],GPCdf$country) == TRUE){
+    index <- findIndex(t15$Country[x],GPCdf$country)
+    GPCdf$crimeIndex2015[index] <- t15$'Crime Index'[x]
+  }
+}
+
+for(x in 1:length(t14$Country)){
+  if(exists(t14$Country[x],GPCdf$country) == TRUE){
+    index <- findIndex(t14$Country[x],GPCdf$country)
+    GPCdf$crimeIndex2014[index] <- t14$'Crime Index'[x]
+  }
+  
+}
+
+for(x in 1:length(t13$Country)){
+  if(exists(t13$Country[x],GPCdf$country) == TRUE){
+    index <- findIndex(t13$Country[x],GPCdf$country)
+    GPCdf$crimeIndex2013[index] <- t13$'Crime Index'[x]
+  }
+  
+}
+#These 4 for-loop do the same thing except they fill in a single column and they don't add new rows since the countries were all the same anyway
+#Fun Fact: I had to add the columns filled with 0's beforehand otherwise the loops would error 
+
+keys <-c()
+#I filled this in the console. Essentially, I took the trendURL vector and pulled out just the country name and saved it in they keys() so that I can use it to match countries in GPCdf. Complicated but it helped automate the process. This code wont do what it originally did but I still wanted to show essentially what I did.
+
+for(x in 1:length(names(H))){
+  table = get(names(H)[x],H)
+  table = data.frame(table)
+  table$Prison.population.total = str_replace_all(table$Prison.population.total,",","")
+  table$Prison.population.total = str_replace_all(table$Prison.population.total,"c","")
+  table$Prison.population.total = as.numeric(table$Prison.population.total)
+  key = keys[x]
+  if(exists(key,GPCdf$country)){
+  for(y in table$Year){
+    if(y == ["YEAR OF CHOICE - 2000-2020 - WILL NOT RUN AS IS"]){
+      index = findIndex(key,GPCdf$country)
+      index2 = findIndex(y,table$Year)
+      GPCdf$prisonPop2000[index] = table$Prison.population.total[index2]}}}}
+
+#This for-loop is more manual - basically it can only go through one column at a time in GPCdf, but can check if the table has the prison trend data for the year associated with the column in GPCdf. If it does, it fill in the value. This also fixes conversion issues in the prison trend tables and makes it numeric so it doesn't conflict with GPCdf
+
+row.names(GPCdf) = GPCdf$country
+#I got rid of the country column and made the row names the countries during my analysis
+#Another final step not mentioned here was removing all rows that had even a single NA or empty(0) value
+```
+
+Code used for summarizing data
+
+```{r,eval=FALSE}
+barplot(GPCdf$totalPop2020,xlab="Country",ylab="Population",main="2020 Populations")
+#Checking for outliers
+
+plot(GPCdf$crimeIndex2020,col="Red",xlab="Country",ylab="Crime Index",main="Crime Index Trend 2020-2013 (2019-2017 excluded)",pch=20)
+points(GPCdf$crimeIndex2016,col="Blue",pch=20)
+points(GPCdf$crimeIndex2015,col="Orange",pch=20)
+points(GPCdf$crimeIndex2014,col="Purple",pch=20)
+points(GPCdf$crimeIndex2013,col="Grey",pch=20)
+legend(x="topright",fill=c("Red","Blue","Orange","Purple","Grey"),legend=c(2020,2016,2015,2014,2013))
+
+plot(GPCdf$prisonPop2020,col="Red",xlab="Country",main="Prison Population Trends 2020-2012 (even yrs)",ylab="Population",pch=20)
+points(GPCdf$prisonPop2018,col="Blue",pch=20)
+points(GPCdf$prisonPop2016,col="Orange",pch=20)
+points(GPCdf$prisonPop2014,col="Purple",pch=20)
+points(GPCdf$prisonPop2012,col="Grey",pch=20)
+legend(x="topright",fill=c("Red","Blue","Orange","Purple","Grey"),legend=c(2020,2018,2016,2014,2012))
+
+plot(GPCdf$prisonPop2010,col="Red",xlab="Country",main="Prison Population Trends 2010-2000 (even yrs)",ylab="Population",pch=20)
+points(GPCdf$prisonPop2008,col="Blue",pch=20)
+points(GPCdf$prisonPop2006,col="Orange",pch=20)
+points(GPCdf$prisonPop2004,col="Purple",pch=20)
+points(GPCdf$prisonPop2002,col="Grey",pch=20)
+points(GPCdf$prisonPop2000,pch=20)
+legend(x="topright",fill=c("Red","Blue","Orange","Purple","Grey","Black"),legend=c(2010,2008,2006,2004,2002,2000))
+#These plots show what is normal for the data set, shows that there isn't massive change over the years in any category and those that change a lot tend to be outliers
+
+#Sanity Check
+summary(GPCdf$prisonPop2000)
+summary(GPCdf$crimeIndex2014)
+typeof(GPCdf$totalPop2020)
+typeof(GPCdf$prisonPop2012)
+typeof(GPCdf$crimeIndex2016)
+```
+
+Code used for analyzing
+
+```{r,eval=FALSE}
+library(randomForest)
+require(caTools)
+
+#getting rid of outliers that messed with clustering
+GPCdf[c("Brazil","India","Mexico","Thailand","Georgia","Panama"),] = NA
+GPCdf = na.omit(GPCdf)
+
+GPCdfcluster = GPCdf
+#Standardizing prison populations according to current total population
+GPCdfcluster$prisonPop2020 = GPCdf$prisonPop2020/GPCdf$totalPop2020
+GPCdfcluster$prisonPop2018 = GPCdf$prisonPop2018/GPCdf$totalPop2020
+GPCdfcluster$prisonPop2016 = GPCdf$prisonPop2016/GPCdf$totalPop2020
+GPCdfcluster$prisonPop2014 = GPCdf$prisonPop2014/GPCdf$totalPop2020
+GPCdfcluster$prisonPop2012 = GPCdf$prisonPop2012/GPCdf$totalPop2020
+GPCdfcluster$prisonPop2010 = GPCdf$prisonPop2010/GPCdf$totalPop2020
+GPCdfcluster$prisonPop2008 = GPCdf$prisonPop2008/GPCdf$totalPop2020
+GPCdfcluster$prisonPop2006 = GPCdf$prisonPop2006/GPCdf$totalPop2020
+GPCdfcluster$prisonPop2004 = GPCdf$prisonPop2004/GPCdf$totalPop2020
+GPCdfcluster$prisonPop2002 = GPCdf$prisonPop2002/GPCdf$totalPop2020
+GPCdfcluster$prisonPop2000 = GPCdf$prisonPop2000/GPCdf$totalPop2020
+
+#getting rid of totalpopulation
+GPCdfcluster = subset(GPCdfcluster, select = -c(totalPop2020))
+GPCdf_scaled = scale(GPCdfcluster)
+GPCdf_scaled = data.frame(GPCdf_scaled)
+#checking column means and standard deviation before clustering
+summary(GPCdf_scaled$prisonPop2020)
+sd(GPCdf_scaled$crimeIndex2020)
+sd(GPCdf_scaled$prisonPop2020)
+
+dist_mat <- dist(GPCdf_scaled, method = 'euclidean')
+hclust_avg <- hclust(dist_mat, method = 'average')
+plot(hclust_avg)
+rect.hclust(hclust_avg , k = 4, border = 2:6)
+abline(h = 5, col = 'red')
+cut_avg <- cutree(hclust_avg, k = 4)
+GPCdf_cl = data.frame(GPCdf,"cluster"=cut_avg)
+
+par(las=2)
+with(GPCdf_cl,barplot(totalPop2020, xlab="Country", ylab="Population", main="Total Populations within Clusters", col=factor(cluster), pch=20, names.arg=row.names(GPCdf),cex.names = .4,cex.axis=.5))
+
+
+GPCdf_tree = data.frame(GPCdf,"cluster"=cut_avg)
+GPCdf_tree = subset(GPCdf_tree, select = -c(totalPop2020))
+GPCdf_tree$cluster = as.factor(GPCdf_tree$cluster)
+sample = sample.split(GPCdf_tree, SplitRatio = .75)
+train = subset(GPCdf_tree, sample == TRUE)
+test = subset(GPCdf_tree, sample == FALSE)
+
+dim(train)
+dim(test)
+
+rf = randomForest(
+  cluster ~.,
+  data=train
+)
+rf
+pred = predict(rf,newdata=test[-17])
+cm = table(test[,17],pred)
+cm
+
+#Cluster 1
+with(GPCdf_cl, plot(crimeIndex2020[cluster == 1]~prisonPop2020[cluster == 1],pch=20,ylab="Crime Index",xlab="Prison Population",main="2020-2014 [Crime Index ~ Prison Population] for Cluster 1"))
+with(GPCdf_cl, points(crimeIndex2016[cluster == 1]~prisonPop2016[cluster == 1],col="red"))
+with(GPCdf_cl, points(crimeIndex2014[cluster == 1]~prisonPop2014[cluster == 1],col="purple"))
+legend("bottomright",legend = c("2020","2016","2014"),fill=c("black","red","purple"))
+
+with(GPCdf_cl, plot(prisonPop2020[cluster == 1]~totalPop2020[cluster == 1],pch=20,xlab="Population",ylab="Prison Pop",main="2020 [Prison Population ~ Total Population] for Cluster 1"))
+
+#Cluster 3
+with(GPCdf_cl, plot(crimeIndex2020[cluster == 3]~prisonPop2020[cluster == 3],pch=20,ylab="Crime Index",xlab="Prison Population",main="2020-2014 [Crime Index ~ Prison Population] for Cluster 3"))
+with(GPCdf_cl, points(crimeIndex2016[cluster == 3]~prisonPop2016[cluster == 3],col="red"))
+with(GPCdf_cl, points(crimeIndex2014[cluster == 3]~prisonPop2014[cluster == 3],col="purple"))
+legend("bottomright",legend = c("2020","2016","2014"),fill=c("black","red","purple"))
+
+with(GPCdf_cl, plot(prisonPop2020[cluster == 3]~totalPop2020[cluster == 3],pch=20,xlab="Population",ylab="Prison Pop",main="2020 [Prison Population ~ Total Population] for Cluster 3"))
+
+#Linear correlation between prison and total population which makes sense. Cluster with the most data, only cluster to show any type of correlation.
+
+#Cluster 4
+with(GPCdf_cl, plot(crimeIndex2020[cluster == 4]~prisonPop2020[cluster == 4],pch=20,ylab="Crime Index",xlab="Prison Population",main="2020-2014 [Crime Index ~ Prison Population] for Cluster 4"),ylim=c(0,60))
+with(GPCdf_cl, points(crimeIndex2016[cluster == 4]~prisonPop2016[cluster == 4],col="red"))
+with(GPCdf_cl, points(crimeIndex2014[cluster == 4]~prisonPop2014[cluster == 4],col="purple"))
+legend("bottomright",legend = c("2020","2016","2014"),fill=c("black","red","purple"))
+
+with(GPCdf_cl, plot(prisonPop2020[cluster == 4]~totalPop2020[cluster == 4],pch=20,xlab="Population",ylab="Prison Pop",main="2020 [Prison Population ~ Total Population] for Cluster 4"))
+```
+
